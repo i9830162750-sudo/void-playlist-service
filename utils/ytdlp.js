@@ -2,12 +2,24 @@ const { spawn } = require('child_process');
 const path = require('path');
 
 // Prefer local binary (deployed on Render), fall back to system PATH
-const YTDLP_BIN = path.join(__dirname, '../bin/yt-dlp');
+const YTDLP_BIN = (() => {
+  const local = path.join(__dirname, '../bin/yt-dlp');
+  try { require('fs').accessSync(local, require('fs').constants.X_OK); return local; }
+  catch { return 'yt-dlp'; }
+})();
+
+// Common flags to reduce bot-detection and speed up requests
+const COMMON_FLAGS = [
+  '--no-warnings',
+  '--no-check-certificates',
+  '--extractor-retries', '3',
+  '--socket-timeout', '15',
+  // Rotate through player clients — reduces bot detection significantly
+  '--extractor-args', 'youtube:player_client=ios,web',
+];
 
 /**
  * Run yt-dlp and collect stdout as a string.
- * @param {string[]} args
- * @returns {Promise<string>}
  */
 function run(args) {
   return new Promise((resolve, reject) => {
@@ -25,43 +37,66 @@ function run(args) {
 }
 
 /**
- * Get metadata for a single YouTube video.
- * Returns a clean track object.
+ * Get a direct audio stream URL for a YouTube video (fast — just URL extraction).
+ * Returns { url, mimeType } — the shape the main VOID server expects.
+ */
+async function getStreamUrl(videoId) {
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  // -g prints the direct URL; -f selects audio-only
+  const url = await run([
+    '-g',
+    '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
+    '--no-playlist',
+    ...COMMON_FLAGS,
+    ytUrl,
+  ]);
+  if (!url) throw new Error('yt-dlp returned empty URL');
+  // Guess mimeType from URL or default to webm
+  const mimeType = url.includes('.m4a') || url.includes('mime=audio%2Fmp4')
+    ? 'audio/mp4'
+    : 'audio/webm';
+  return { url, mimeType };
+}
+
+/**
+ * Get metadata for a single YouTube video (title, thumbnail, etc).
+ * NOTE: does NOT return a playable URL — use getStreamUrl for that.
  */
 async function getVideoInfo(videoId) {
-  const url = `https://www.youtube.com/watch?v=${videoId}`;
-  const raw = await run(['--dump-json', '--no-playlist', '--no-warnings', url]);
+  const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
+  const raw = await run(['--dump-json', '--no-playlist', ...COMMON_FLAGS, ytUrl]);
   const info = JSON.parse(raw);
   return normalizeYTTrack(info);
 }
 
 /**
- * Fetch all tracks from a YouTube playlist (flat, no audio download).
- * Returns array of track objects.
+ * Fetch all tracks from a YouTube playlist (flat, no download).
  */
 async function getPlaylistTracks(url) {
   const raw = await run([
     '--flat-playlist',
     '--dump-json',
-    '--no-warnings',
+    ...COMMON_FLAGS,
     url,
   ]);
-  // yt-dlp dumps one JSON object per line for playlists
   return raw
     .split('\n')
     .filter(Boolean)
     .map(line => {
-      const entry = JSON.parse(line);
-      return {
-        id:        entry.id,
-        title:     entry.title || entry.ie_key,
-        artist:    entry.uploader || entry.channel || '',
-        thumbnail: entry.thumbnails?.[0]?.url || entry.thumbnail || '',
-        duration:  entry.duration || 0,
-        source:    'youtube',
-        videoId:   entry.id,
-      };
-    });
+      try {
+        const entry = JSON.parse(line);
+        return {
+          id:        entry.id,
+          title:     entry.title || entry.ie_key,
+          artist:    entry.uploader || entry.channel || '',
+          thumbnail: entry.thumbnails?.[0]?.url || entry.thumbnail || `https://i.ytimg.com/vi/${entry.id}/mqdefault.jpg`,
+          duration:  entry.duration || 0,
+          source:    'youtube',
+          videoId:   entry.id,
+        };
+      } catch { return null; }
+    })
+    .filter(Boolean);
 }
 
 /**
@@ -72,17 +107,17 @@ async function searchYouTube(query) {
     `ytsearch1:${query}`,
     '--dump-json',
     '--no-playlist',
-    '--no-warnings',
+    ...COMMON_FLAGS,
   ]);
   if (!raw) return null;
-  const info = JSON.parse(raw.split('\n')[0]);
-  return info?.id || null;
+  try {
+    const info = JSON.parse(raw.split('\n')[0]);
+    return info?.id || null;
+  } catch { return null; }
 }
 
 /**
  * Pipe yt-dlp audio output directly into an Express response stream.
- * @param {string} videoId
- * @param {import('express').Response} res
  */
 function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
@@ -90,15 +125,14 @@ function streamAudio(videoId, res) {
   const proc = spawn(YTDLP_BIN, [
     url,
     '--no-playlist',
-    '--no-warnings',
     '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
-    '-o', '-',          // output to stdout
+    '-o', '-',
     '--quiet',
+    ...COMMON_FLAGS,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
   let headersSent = false;
 
-  // Set headers on first data chunk so we know the stream started
   proc.stdout.once('data', () => {
     if (!headersSent) {
       headersSent = true;
@@ -112,7 +146,6 @@ function streamAudio(videoId, res) {
 
   proc.stderr.on('data', d => {
     const msg = d.toString();
-    // Only log real errors, not progress lines
     if (!msg.startsWith('[download]') && !msg.startsWith('[info]')) {
       console.error('[yt-dlp stderr]', msg.trim());
     }
@@ -131,7 +164,6 @@ function streamAudio(videoId, res) {
     }
   });
 
-  // If the client disconnects, kill yt-dlp
   res.on('close', () => proc.kill('SIGTERM'));
 }
 
@@ -148,4 +180,4 @@ function normalizeYTTrack(info) {
   };
 }
 
-module.exports = { getVideoInfo, getPlaylistTracks, searchYouTube, streamAudio };
+module.exports = { getStreamUrl, getVideoInfo, getPlaylistTracks, searchYouTube, streamAudio };
