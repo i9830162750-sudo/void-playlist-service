@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: void-handler
+    runtime: node
+    buildCommand: npm install && npm run setup
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: SPOTIFY_CLIENT_ID
+        sync: false
+      - key: SPOTIFY_CLIENT_SECRET
+        sync: false
+      # Optional: lock down which origin can call this service
+      # - key: VOID_ORIGIN
+      #   value: https://your-void-app.onrender.com
+    healthCheckPath: /health
+    autoDeploy: true
