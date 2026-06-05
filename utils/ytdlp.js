@@ -47,7 +47,6 @@ async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   const url = await run([
     '-g',
-    '-f', 'bestaudio',
     '--no-playlist',
     ...COMMON_FLAGS,
     ytUrl,
@@ -125,7 +124,6 @@ function streamAudio(videoId, res) {
   const proc = spawn(YTDLP_BIN, [
     url,
     '--no-playlist',
-    '-f', 'bestaudio',
     '-o', '-',
     '--quiet',
     ...COMMON_FLAGS,
