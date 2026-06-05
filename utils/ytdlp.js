@@ -1,12 +1,15 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 
 // Prefer local binary (deployed on Render), fall back to system PATH
 const YTDLP_BIN = (() => {
   const local = path.join(__dirname, '../bin/yt-dlp');
-  try { require('fs').accessSync(local, require('fs').constants.X_OK); return local; }
+  try { fs.accessSync(local, fs.constants.X_OK); return local; }
   catch { return 'yt-dlp'; }
 })();
+
+const COOKIES_PATH = path.join(__dirname, '../cookies.txt');
 
 // Common flags to reduce bot-detection and speed up requests
 const COMMON_FLAGS = [
@@ -14,8 +17,8 @@ const COMMON_FLAGS = [
   '--no-check-certificates',
   '--extractor-retries', '3',
   '--socket-timeout', '15',
-  // Rotate through player clients — reduces bot detection significantly
   '--extractor-args', 'youtube:player_client=ios,web',
+  ...(fs.existsSync(COOKIES_PATH) ? ['--cookies', COOKIES_PATH] : []),
 ];
 
 /**
@@ -42,7 +45,6 @@ function run(args) {
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  // -g prints the direct URL; -f selects audio-only
   const url = await run([
     '-g',
     '-f', 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio',
@@ -51,7 +53,6 @@ async function getStreamUrl(videoId) {
     ytUrl,
   ]);
   if (!url) throw new Error('yt-dlp returned empty URL');
-  // Guess mimeType from URL or default to webm
   const mimeType = url.includes('.m4a') || url.includes('mime=audio%2Fmp4')
     ? 'audio/mp4'
     : 'audio/webm';
@@ -59,8 +60,7 @@ async function getStreamUrl(videoId) {
 }
 
 /**
- * Get metadata for a single YouTube video (title, thumbnail, etc).
- * NOTE: does NOT return a playable URL — use getStreamUrl for that.
+ * Get metadata for a single YouTube video.
  */
 async function getVideoInfo(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
