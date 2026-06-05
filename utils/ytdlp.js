@@ -9,6 +9,8 @@ const YTDLP_BIN = (() => {
 })();
 
 const COOKIES_PATH = path.join(__dirname, '../cookies.txt');
+const COOKIES_EXISTS = fs.existsSync(COOKIES_PATH);
+console.log('[void-handler] cookies path:', COOKIES_PATH, '| exists:', COOKIES_EXISTS);
 
 const COMMON_FLAGS = [
   '--no-warnings',
@@ -16,7 +18,7 @@ const COMMON_FLAGS = [
   '--extractor-retries', '3',
   '--socket-timeout', '15',
   '--extractor-args', 'youtube:player_client=ios,web',
-  ...(fs.existsSync(COOKIES_PATH) ? ['--cookies', COOKIES_PATH] : []),
+  ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
 
 function run(args) {
