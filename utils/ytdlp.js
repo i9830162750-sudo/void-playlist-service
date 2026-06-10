@@ -46,11 +46,11 @@ async function getStreamUrl(videoId) {
   const strategies = [
     {
       name: 'Best audio only (ba)',
-      args: ['-f', 'ba', '--get-url']
+      args: ['-f', 'webm', '--get-url']
     },
     {
       name: 'Best audio with fallback',
-      args: ['-f', 'ba/b', '--get-url']
+      args: ['-f', 'm4a', '--get-url']
     },
     {
       name: 'Worst video + best audio',
