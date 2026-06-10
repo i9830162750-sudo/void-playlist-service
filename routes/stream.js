@@ -4,7 +4,8 @@ const ytdlp  = require('../utils/ytdlp');
 /**
  * GET /stream/:videoId
  *
- * Streams audio for a YouTube videoId directly to the client.
+ * Streams audio for a YouTube videoId in m4a format directly to the client.
+ * Returns Content-Type: audio/mp4 with m4a audio stream.
  */
 router.get('/:videoId', (req, res) => {
   const { videoId } = req.params;
@@ -17,7 +18,8 @@ router.get('/:videoId', (req, res) => {
 /**
  * GET /stream/info/:videoId
  *
- * Returns { url, mimeType } — a direct playable audio URL.
+ * Returns { url, mimeType } — a direct playable m4a audio URL.
+ * mimeType will be 'audio/mp4' for m4a format streams.
  * The main VOID server calls this and forwards the URL to the client.
  */
 router.get('/info/:videoId', async (req, res, next) => {
