@@ -16,8 +16,7 @@ const COMMON_FLAGS = [
   '--no-warnings',
   '--no-check-certificates',
   '--extractor-retries', '3',
-  '--socket-timeout', '30',    // INCREASED from 15
-  '--read-timeout', '30',      // ADDED
+  '--socket-timeout', '60',    // INCREASED from 15
   '--extractor-args', 'youtube:player_client=ios,web',
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
