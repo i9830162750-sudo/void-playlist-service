@@ -16,7 +16,8 @@ const COMMON_FLAGS = [
   '--no-warnings',
   '--no-check-certificates',
   '--extractor-retries', '3',
-  '--socket-timeout', '15',
+  '--socket-timeout', '30',    // INCREASED from 15
+  '--read-timeout', '30',      // ADDED
   '--extractor-args', 'youtube:player_client=ios,web',
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
@@ -37,22 +38,55 @@ function run(args) {
 }
 
 /**
- * Get a direct audio stream URL.
- * Uses --get-url with no format filter so yt-dlp picks whatever works.
+ * Get a direct audio stream URL with multiple format fallback strategies
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
-  const output = await run([
-    '--get-url',
-    '--no-playlist',
-    ...COMMON_FLAGS,
-    ytUrl,
-  ]);
-  // --get-url may return multiple lines (video+audio), take the first
-  const url = output.split('\n')[0].trim();
-  if (!url) throw new Error('yt-dlp returned empty URL');
-  const mimeType = url.includes('mime=audio%2Fmp4') ? 'audio/mp4' : 'audio/webm';
-  return { url, mimeType };
+  
+  // Try multiple format strategies in order of preference
+  const strategies = [
+    {
+      name: 'Best audio only (ba)',
+      args: ['-f', 'ba', '--get-url']
+    },
+    {
+      name: 'Best audio with fallback',
+      args: ['-f', 'ba/b', '--get-url']
+    },
+    {
+      name: 'Worst video + best audio',
+      args: ['-f', 'worstvideo+bestaudio/best', '--get-url']
+    },
+    {
+      name: 'Best format overall',
+      args: ['-f', 'best', '--get-url']
+    }
+  ];
+  
+  let lastError;
+  for (const strategy of strategies) {
+    try {
+      console.log(`[yt-dlp] Trying ${strategy.name} for ${videoId}`);
+      const output = await run([
+        '--no-playlist',
+        ...strategy.args,
+        ...COMMON_FLAGS,
+        ytUrl,
+      ]);
+      
+      const url = output.split('\n')[0].trim();
+      if (url && url.startsWith('http')) {
+        console.log(`[yt-dlp] ✓ Success with ${strategy.name}`);
+        const mimeType = url.includes('mime=audio%2Fmp4') ? 'audio/mp4' : 'audio/webm';
+        return { url, mimeType };
+      }
+    } catch (e) {
+      lastError = e;
+      console.warn(`[yt-dlp] ✗ ${strategy.name} failed:`, e.message);
+    }
+  }
+  
+  throw new Error(`All yt-dlp format strategies failed for ${videoId}: ${lastError?.message}`);
 }
 
 async function getVideoInfo(videoId) {
@@ -103,8 +137,12 @@ function streamAudio(videoId, res) {
     if (!msg.startsWith('[download]') && !msg.startsWith('[info]'))
       console.error('[yt-dlp stderr]', msg.trim());
   });
-  proc.on('error', err => { if (!res.headersSent) res.status(500).json({ error: 'yt-dlp failed' }); });
-  proc.on('close', code => { if (code !== 0 && !res.headersSent) res.status(500).json({ error: `yt-dlp exited ${code}` }); });
+  proc.on('error', err => { 
+    if (!res.headersSent) res.status(500).json({ error: 'yt-dlp failed', detail: err.message }); 
+  });
+  proc.on('close', code => { 
+    if (code !== 0 && !res.headersSent) res.status(500).json({ error: `yt-dlp exited ${code}` }); 
+  });
   res.on('close', () => proc.kill('SIGTERM'));
 }
 
