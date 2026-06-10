@@ -54,11 +54,11 @@ async function getStreamUrl(videoId) {
     },
     {
       name: 'Worst video + best audio',
-      args: ['-f', 'worstvideo+bestaudio/best', '--get-url']
+      args: ['-f', 'm4a', '--get-url']
     },
     {
       name: 'Best format overall',
-      args: ['-f', 'best', '--get-url']
+      args: ['-f', 'm4a', '--get-url']
     }
   ];
   
