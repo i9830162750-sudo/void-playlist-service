@@ -37,28 +37,28 @@ function run(args) {
 }
 
 /**
- * Get a direct audio stream URL with multiple format fallback strategies
+ * Get a direct audio stream URL with m4a format preference
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  // Try multiple format strategies in order of preference
+  // Prioritize m4a format for streaming
   const strategies = [
     {
-      name: 'Best audio only (ba)',
-      args: ['-f', 'webm', '--get-url']
+      name: 'Best m4a audio',
+      args: ['-f', 'ba[ext=m4a]', '--get-url']
     },
     {
-      name: 'Best audio with fallback',
+      name: 'M4a audio with fallback',
       args: ['-f', 'm4a', '--get-url']
     },
     {
-      name: 'Worst video + best audio',
-      args: ['-f', 'm4a', '--get-url']
+      name: 'Best audio (any format)',
+      args: ['-f', 'ba', '--get-url']
     },
     {
-      name: 'Best format overall',
-      args: ['-f', 'm4a', '--get-url']
+      name: 'Best overall format',
+      args: ['-f', 'best', '--get-url']
     }
   ];
   
@@ -76,7 +76,8 @@ async function getStreamUrl(videoId) {
       const url = output.split('\n')[0].trim();
       if (url && url.startsWith('http')) {
         console.log(`[yt-dlp] ✓ Success with ${strategy.name}`);
-        const mimeType = url.includes('mime=audio%2Fmp4') ? 'audio/mp4' : 'audio/webm';
+        // Determine mime type based on URL content or use audio/mp4 for m4a
+        const mimeType = determineMimeType(url);
         return { url, mimeType };
       }
     } catch (e) {
@@ -86,6 +87,24 @@ async function getStreamUrl(videoId) {
   }
   
   throw new Error(`All yt-dlp format strategies failed for ${videoId}: ${lastError?.message}`);
+}
+
+/**
+ * Determine MIME type based on URL parameters and format indicators
+ */
+function determineMimeType(url) {
+  // Check for explicit mime type in URL
+  if (url.includes('mime=audio%2Fm4a') || url.includes('mime=audio/m4a')) {
+    return 'audio/mp4'; // m4a is typically audio/mp4
+  }
+  if (url.includes('mime=audio%2Fmp4') || url.includes('mime=audio/mp4')) {
+    return 'audio/mp4';
+  }
+  if (url.includes('mime=audio%2Fwebm') || url.includes('mime=audio/webm')) {
+    return 'audio/webm';
+  }
+  // Default to audio/mp4 for m4a streams
+  return 'audio/mp4';
 }
 
 async function getVideoInfo(videoId) {
@@ -116,18 +135,28 @@ async function searchYouTube(query) {
   catch { return null; }
 }
 
+/**
+ * Stream audio in m4a format
+ */
 function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const proc = spawn(YTDLP_BIN, [
-    url, '--no-playlist', '-o', '-', '--quiet', ...COMMON_FLAGS,
+    url, 
+    '--no-playlist', 
+    '-f', 'ba[ext=m4a]/m4a/ba',  // Prioritize m4a format
+    '-o', '-', 
+    '--quiet', 
+    ...COMMON_FLAGS,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
   let headersSent = false;
   proc.stdout.once('data', () => {
     if (!headersSent) {
       headersSent = true;
-      res.setHeader('Content-Type', 'audio/webm');
+      res.setHeader('Content-Type', 'audio/mp4');
       res.setHeader('Transfer-Encoding', 'chunked');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
     }
   });
   proc.stdout.pipe(res);
