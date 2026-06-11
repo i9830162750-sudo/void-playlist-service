@@ -37,16 +37,15 @@ function run(args) {
 }
 
 /**
- * Get a direct audio stream URL - let yt-dlp choose the best audio
+ * Get a direct audio stream URL
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
   try {
-    console.log(`[yt-dlp] Getting best audio for ${videoId}`);
+    console.log(`[yt-dlp] Getting audio for ${videoId}`);
     const output = await run([
       '--no-playlist',
-      '-f', 'bestaudio',
       '--get-url',
       ...COMMON_FLAGS,
       ytUrl,
@@ -93,14 +92,13 @@ async function searchYouTube(query) {
 }
 
 /**
- * Stream best audio in m4a/mp4 format
+ * Stream audio
  */
 function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const proc = spawn(YTDLP_BIN, [
     url, 
     '--no-playlist',
-    '-f', '',
     '-o', '-', 
     '--quiet', 
     ...COMMON_FLAGS,
