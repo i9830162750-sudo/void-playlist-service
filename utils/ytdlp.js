@@ -37,60 +37,31 @@ function run(args) {
 }
 
 /**
- * Get a direct audio stream URL with m4a format preference
- * Uses format codes that actually exist on YouTube
+ * Get a direct audio stream URL - let yt-dlp choose the best audio
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  // Format strategies that work with actual YouTube streams
-  const strategies = [
-    {
-      name: 'Best m4a audio (140)',
-      args: ['-f', '140', '--get-url']  // 140 = m4a audio 128kbps
-    },
-    {
-      name: 'M4a audio fallback (139)',
-      args: ['-f', '139', '--get-url']  // 139 = m4a audio 48kbps
-    },
-    {
-      name: 'Best audio m4a',
-      args: ['-f', 'bestaudio[ext=m4a]', '--get-url']
-    },
-    {
-      name: 'Best audio (any format)',
-      args: ['-f', 'bestaudio', '--get-url']
-    },
-    {
-      name: 'Best format',
-      args: ['-f', 'best', '--get-url']
+  try {
+    console.log(`[yt-dlp] Getting best audio for ${videoId}`);
+    const output = await run([
+      '--no-playlist',
+      '-f', 'bestaudio',
+      '--get-url',
+      ...COMMON_FLAGS,
+      ytUrl,
+    ]);
+    
+    const url = output.split('\n')[0].trim();
+    if (url && url.startsWith('http')) {
+      console.log(`[yt-dlp] ✓ Got stream URL`);
+      return { url, mimeType: 'audio/mp4' };
     }
-  ];
-  
-  let lastError;
-  for (const strategy of strategies) {
-    try {
-      console.log(`[yt-dlp] Trying ${strategy.name} for ${videoId}`);
-      const output = await run([
-        '--no-playlist',
-        ...strategy.args,
-        ...COMMON_FLAGS,
-        ytUrl,
-      ]);
-      
-      const url = output.split('\n')[0].trim();
-      if (url && url.startsWith('http')) {
-        console.log(`[yt-dlp] ✓ Success with ${strategy.name}`);
-        const mimeType = 'audio/mp4'; // m4a is audio/mp4
-        return { url, mimeType };
-      }
-    } catch (e) {
-      lastError = e;
-      console.warn(`[yt-dlp] ✗ ${strategy.name} failed:`, e.message);
-    }
+    throw new Error('No valid URL returned');
+  } catch (e) {
+    console.error(`[yt-dlp] Failed:`, e.message);
+    throw e;
   }
-  
-  throw new Error(`All yt-dlp format strategies failed for ${videoId}: ${lastError?.message}`);
 }
 
 async function getVideoInfo(videoId) {
@@ -122,14 +93,14 @@ async function searchYouTube(query) {
 }
 
 /**
- * Stream audio in m4a format
+ * Stream best audio in m4a/mp4 format
  */
 function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const proc = spawn(YTDLP_BIN, [
     url, 
     '--no-playlist',
-    '-f', '140/139/bestaudio[ext=m4a]/bestaudio/best',  // Format fallback chain
+    '-f', '',
     '-o', '-', 
     '--quiet', 
     ...COMMON_FLAGS,
