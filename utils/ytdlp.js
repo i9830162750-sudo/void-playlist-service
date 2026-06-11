@@ -16,7 +16,7 @@ const COMMON_FLAGS = [
   '--no-warnings',
   '--no-check-certificates',
   '--extractor-retries', '3',
-  '--socket-timeout', '60',    // INCREASED from 15
+  '--socket-timeout', '60',
   '--extractor-args', 'youtube:player_client=ios,web',
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
@@ -38,26 +38,31 @@ function run(args) {
 
 /**
  * Get a direct audio stream URL with m4a format preference
+ * Uses format codes that actually exist on YouTube
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
-  // Prioritize m4a format for streaming
+  // Format strategies that work with actual YouTube streams
   const strategies = [
     {
-      name: 'Best m4a audio',
-      args: ['-f', 'ba[ext=m4a]', '--get-url']
+      name: 'Best m4a audio (140)',
+      args: ['-f', '140', '--get-url']  // 140 = m4a audio 128kbps
     },
     {
-      name: 'M4a audio with fallback',
-      args: ['-f', 'm4a', '--get-url']
+      name: 'M4a audio fallback (139)',
+      args: ['-f', '139', '--get-url']  // 139 = m4a audio 48kbps
+    },
+    {
+      name: 'Best audio m4a',
+      args: ['-f', 'bestaudio[ext=m4a]', '--get-url']
     },
     {
       name: 'Best audio (any format)',
-      args: ['-f', 'ba', '--get-url']
+      args: ['-f', 'bestaudio', '--get-url']
     },
     {
-      name: 'Best overall format',
+      name: 'Best format',
       args: ['-f', 'best', '--get-url']
     }
   ];
@@ -76,8 +81,7 @@ async function getStreamUrl(videoId) {
       const url = output.split('\n')[0].trim();
       if (url && url.startsWith('http')) {
         console.log(`[yt-dlp] ✓ Success with ${strategy.name}`);
-        // Determine mime type based on URL content or use audio/mp4 for m4a
-        const mimeType = determineMimeType(url);
+        const mimeType = 'audio/mp4'; // m4a is audio/mp4
         return { url, mimeType };
       }
     } catch (e) {
@@ -87,24 +91,6 @@ async function getStreamUrl(videoId) {
   }
   
   throw new Error(`All yt-dlp format strategies failed for ${videoId}: ${lastError?.message}`);
-}
-
-/**
- * Determine MIME type based on URL parameters and format indicators
- */
-function determineMimeType(url) {
-  // Check for explicit mime type in URL
-  if (url.includes('mime=audio%2Fm4a') || url.includes('mime=audio/m4a')) {
-    return 'audio/mp4'; // m4a is typically audio/mp4
-  }
-  if (url.includes('mime=audio%2Fmp4') || url.includes('mime=audio/mp4')) {
-    return 'audio/mp4';
-  }
-  if (url.includes('mime=audio%2Fwebm') || url.includes('mime=audio/webm')) {
-    return 'audio/webm';
-  }
-  // Default to audio/mp4 for m4a streams
-  return 'audio/mp4';
 }
 
 async function getVideoInfo(videoId) {
@@ -142,8 +128,8 @@ function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
   const proc = spawn(YTDLP_BIN, [
     url, 
-    '--no-playlist', 
-    '-f', 'ba[ext=m4a]/m4a/ba',  // Prioritize m4a format
+    '--no-playlist',
+    '-f', '140/139/bestaudio[ext=m4a]/bestaudio/best',  // Format fallback chain
     '-o', '-', 
     '--quiet', 
     ...COMMON_FLAGS,
