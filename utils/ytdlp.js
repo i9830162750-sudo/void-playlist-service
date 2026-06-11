@@ -37,13 +37,25 @@ function run(args) {
 }
 
 /**
- * Get a direct audio stream URL
+ * Get a direct audio stream URL - for localhost testing
+ * List available formats first to debug
  */
 async function getStreamUrl(videoId) {
   const ytUrl = `https://www.youtube.com/watch?v=${videoId}`;
   
   try {
-    console.log(`[yt-dlp] Getting audio for ${videoId}`);
+    console.log(`[yt-dlp] Getting formats for ${videoId}`);
+    // First, list all available formats
+    const formatList = await run([
+      '--no-playlist',
+      '--list-formats',
+      ...COMMON_FLAGS,
+      ytUrl,
+    ]);
+    console.log(`[yt-dlp] Available formats:\n${formatList}`);
+    
+    // Now get the URL with no format filter
+    console.log(`[yt-dlp] Getting audio URL for ${videoId}`);
     const output = await run([
       '--no-playlist',
       '--get-url',
@@ -92,10 +104,12 @@ async function searchYouTube(query) {
 }
 
 /**
- * Stream audio
+ * Stream audio - for localhost testing with format visibility
  */
 function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
+  console.log(`[stream] Starting stream for ${videoId}`);
+  
   const proc = spawn(YTDLP_BIN, [
     url, 
     '--no-playlist',
@@ -108,6 +122,7 @@ function streamAudio(videoId, res) {
   proc.stdout.once('data', () => {
     if (!headersSent) {
       headersSent = true;
+      console.log(`[stream] Got data, sending headers`);
       res.setHeader('Content-Type', 'audio/mp4');
       res.setHeader('Transfer-Encoding', 'chunked');
       res.setHeader('Cache-Control', 'no-cache');
@@ -117,16 +132,20 @@ function streamAudio(videoId, res) {
   proc.stdout.pipe(res);
   proc.stderr.on('data', d => {
     const msg = d.toString();
-    if (!msg.startsWith('[download]') && !msg.startsWith('[info]'))
-      console.error('[yt-dlp stderr]', msg.trim());
+    console.log(`[yt-dlp stderr] ${msg}`);
   });
   proc.on('error', err => { 
+    console.error(`[stream] Process error:`, err.message);
     if (!res.headersSent) res.status(500).json({ error: 'yt-dlp failed', detail: err.message }); 
   });
   proc.on('close', code => { 
+    console.log(`[stream] Process closed with code ${code}`);
     if (code !== 0 && !res.headersSent) res.status(500).json({ error: `yt-dlp exited ${code}` }); 
   });
-  res.on('close', () => proc.kill('SIGTERM'));
+  res.on('close', () => {
+    console.log(`[stream] Response closed, killing process`);
+    proc.kill('SIGTERM');
+  });
 }
 
 function normalizeYTTrack(info) {
