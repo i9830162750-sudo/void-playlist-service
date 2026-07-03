@@ -112,7 +112,7 @@ function streamAudio(videoId, res) {
   const proc = spawn(YTDLP_BIN, [
     url,
     '--no-playlist',
-    '-f', 'bestaudio/best',
+    '-f', 'best',
     '-o', '-',
     '--quiet',
     ...COMMON_FLAGS,
