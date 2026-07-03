@@ -8,6 +8,12 @@ const YTDLP_BIN = (() => {
   catch { return 'yt-dlp'; }
 })();
 
+const FFMPEG_BIN = (() => {
+  const local = path.join(__dirname, '../bin/ffmpeg');
+  try { fs.accessSync(local, fs.constants.X_OK); return local; }
+  catch { return null; }
+})();
+
 const COOKIES_PATH = path.join(__dirname, '../cookies.txt');
 const COOKIES_EXISTS = fs.existsSync(COOKIES_PATH);
 console.log('[void-handler] cookies path:', COOKIES_PATH, '| exists:', COOKIES_EXISTS);
@@ -17,6 +23,7 @@ const COMMON_FLAGS = [
   '--no-check-certificates',
   '--extractor-retries', '3',
   '--socket-timeout', '60',
+  ...(FFMPEG_BIN ? ['--ffmpeg-location', FFMPEG_BIN] : []),
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
 
