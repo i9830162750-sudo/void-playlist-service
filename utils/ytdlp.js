@@ -17,7 +17,6 @@ const COMMON_FLAGS = [
   '--no-check-certificates',
   '--extractor-retries', '3',
   '--socket-timeout', '60',
-  '--extractor-args', 'youtube:player_client=tv_embedded,web_creator',
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
 
