@@ -17,7 +17,7 @@ const COMMON_FLAGS = [
   '--no-check-certificates',
   '--extractor-retries', '3',
   '--socket-timeout', '60',
-  '--extractor-args', 'youtube:player_client=ios,web',
+  '--extractor-args', 'youtube:player_client=tv_embedded,web_creator',
   ...(COOKIES_EXISTS ? ['--cookies', COOKIES_PATH] : []),
 ];
 
@@ -111,10 +111,11 @@ function streamAudio(videoId, res) {
   console.log(`[stream] Starting stream for ${videoId}`);
   
   const proc = spawn(YTDLP_BIN, [
-    url, 
+    url,
     '--no-playlist',
-    '-o', '-', 
-    '--quiet', 
+    '-f', 'bestaudio/best',
+    '-o', '-',
+    '--quiet',
     ...COMMON_FLAGS,
   ], { stdio: ['ignore', 'pipe', 'pipe'] });
 
