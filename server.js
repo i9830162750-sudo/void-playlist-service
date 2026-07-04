@@ -27,7 +27,7 @@ app.use((err, req, res, _next) => {
 app.listen(PORT, () => {
   console.log(`void-handler running on :${PORT}`);
   // Warm up Innertube client on startup
-  require('./utils/youtube').getStreamUrl('dQw4w9WgXcQ')
-    .then(() => console.log('[youtube] Innertube warmed up'))
+  require('./utils/youtube').getClient()
+    .then(() => console.log('[youtube] Innertube client ready'))
     .catch(e => console.warn('[youtube] Warmup failed (non-fatal):', e.message));
 });
