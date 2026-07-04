@@ -112,47 +112,26 @@ async function searchYouTube(query) {
 /**
  * Stream audio - for localhost testing with format visibility
  */
-function streamAudio(videoId, res) {
+async function streamAudio(videoId, res) {
   const url = `https://www.youtube.com/watch?v=${videoId}`;
-  console.log(`[stream] Starting stream for ${videoId}`);
-  
-  const proc = spawn(YTDLP_BIN, [
-    url,
-    '--no-playlist',
-    '-f', 'best[ext=mp4]/best',
-    '-o', '-',
-    '--quiet',
-    ...COMMON_FLAGS,
-  ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
-  let headersSent = false;
-  proc.stdout.once('data', () => {
-    if (!headersSent) {
-      headersSent = true;
-      console.log(`[stream] Got data, sending headers`);
-      res.setHeader('Content-Type', 'audio/mp4');
-      res.setHeader('Transfer-Encoding', 'chunked');
-      res.setHeader('Cache-Control', 'no-cache');
-      res.setHeader('Connection', 'keep-alive');
-    }
-  });
-  proc.stdout.pipe(res);
-  proc.stderr.on('data', d => {
-    const msg = d.toString();
-    console.log(`[yt-dlp stderr] ${msg}`);
-  });
-  proc.on('error', err => { 
-    console.error(`[stream] Process error:`, err.message);
-    if (!res.headersSent) res.status(500).json({ error: 'yt-dlp failed', detail: err.message }); 
-  });
-  proc.on('close', code => { 
-    console.log(`[stream] Process closed with code ${code}`);
-    if (code !== 0 && !res.headersSent) res.status(500).json({ error: `yt-dlp exited ${code}` }); 
-  });
-  res.on('close', () => {
-    console.log(`[stream] Response closed, killing process`);
-    proc.kill('SIGTERM');
-  });
+  console.log(`[stream] Getting URL for ${videoId}`);
+  try {
+    const raw = await run([
+      '--get-url',
+      '--no-playlist',
+      '-f', 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio/18/best',
+      ...COMMON_FLAGS,
+      url,
+    ]);
+    const streamUrl = raw.split('
+')[0].trim();
+    if (!streamUrl.startsWith('http')) throw new Error('No URL returned');
+    console.log(`[stream] Redirecting ${videoId}`);
+    res.redirect(302, streamUrl);
+  } catch (e) {
+    console.error(`[stream] Failed:`, e.message);
+    if (!res.headersSent) res.status(500).json({ error: e.message });
+  }
 }
 
 function normalizeYTTrack(info) {
