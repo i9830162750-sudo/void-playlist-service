@@ -73,8 +73,8 @@ async function streamAudio(videoId, res) {
     const format = info.chooseFormat({ quality: 'best', type: 'audio' });
     if (!format) throw new Error('No audio format available');
 
-    const streamUrl = format.decipher(yt.session.player);
-    if (!streamUrl || !streamUrl.startsWith('http')) throw new Error('Could not decipher stream URL');
+    const streamUrl = format.url || (yt.session.player ? format.decipher(yt.session.player) : null);
+    if (!streamUrl || !streamUrl.startsWith('http')) throw new Error('Could not get stream URL');
 
     console.log(`[stream] Redirecting ${videoId} → ${streamUrl.substring(0, 60)}...`);
     res.redirect(302, streamUrl);
@@ -90,7 +90,9 @@ async function getStreamUrl(videoId) {
   const info = await yt.getInfo(videoId);
   const format = info.chooseFormat({ quality: 'best', type: 'audio' });
   if (!format) throw new Error('No audio format available');
-  const url = format.decipher(yt.session.player);
+  // Use streaming URL directly if already deciphered, else decipher
+  const url = format.url || (yt.session.player ? format.decipher(yt.session.player) : null);
+  if (!url) throw new Error('Could not get stream URL');
   return { url, mimeType: format.mime_type || 'audio/mp4' };
 }
 
@@ -113,4 +115,4 @@ function extractPlaylistId(url) {
   }
 }
 
-module.exports = { getPlaylistTracks, getVideoInfo, streamAudio, getStreamUrl, searchYouTube };
+module.exports = { getClient, getPlaylistTracks, getVideoInfo, streamAudio, getStreamUrl, searchYouTube };
