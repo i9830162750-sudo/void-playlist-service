@@ -123,8 +123,7 @@ async function streamAudio(videoId, res) {
       ...COMMON_FLAGS,
       url,
     ]);
-    const streamUrl = raw.split('
-')[0].trim();
+    const streamUrl = raw.split('\n')[0].trim();
     if (!streamUrl.startsWith('http')) throw new Error('No URL returned');
     console.log(`[stream] Redirecting ${videoId}`);
     res.redirect(302, streamUrl);
