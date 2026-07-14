@@ -1,4 +1,5 @@
 const { Innertube } = require('youtubei.js');
+const { resolveWithVLC } = require('./vlc');
 
 let _yt = null;
 
@@ -10,7 +11,6 @@ async function getClient() {
   return _yt;
 }
 
-// Reset client on error so it reinits fresh next call
 function resetClient() {
   _yt = null;
 }
@@ -63,37 +63,32 @@ async function getVideoInfo(videoId) {
   };
 }
 
+/**
+ * Streams audio for a videoId directly to the Express response.
+ * Uses VLC exclusively for stream URL resolution.
+ */
 async function streamAudio(videoId, res) {
   console.log(`[stream] Getting stream for ${videoId}`);
   try {
-    const yt = await getClient();
-    const info = await yt.getInfo(videoId);
-
-    // Pick best audio-only format
-    const format = info.chooseFormat({ quality: 'best', type: 'audio' });
-    if (!format) throw new Error('No audio format available');
-
-    const streamUrl = format.url || (yt.session.player ? format.decipher(yt.session.player) : null);
-    if (!streamUrl || !streamUrl.startsWith('http')) throw new Error('Could not get stream URL');
-
+    const streamUrl = await resolveWithVLC(videoId);
     console.log(`[stream] Redirecting ${videoId} → ${streamUrl.substring(0, 60)}...`);
     res.redirect(302, streamUrl);
   } catch (e) {
-    console.error(`[stream] Failed for ${videoId}:`, e.message);
-    resetClient();
+    console.error(`[stream] VLC failed for ${videoId}:`, e.message);
     if (!res.headersSent) res.status(500).json({ error: e.message });
   }
 }
 
+/**
+ * Returns { url, mimeType } for a videoId.
+ * Uses VLC exclusively for stream URL resolution.
+ */
 async function getStreamUrl(videoId) {
-  const yt = await getClient();
-  const info = await yt.getInfo(videoId);
-  const format = info.chooseFormat({ quality: 'best', type: 'audio' });
-  if (!format) throw new Error('No audio format available');
-  // Use streaming URL directly if already deciphered, else decipher
-  const url = format.url || (yt.session.player ? format.decipher(yt.session.player) : null);
-  if (!url) throw new Error('Could not get stream URL');
-  return { url, mimeType: format.mime_type || 'audio/mp4' };
+  const url = await resolveWithVLC(videoId);
+  // Detect mime type from itag in URL
+  const itag = url.match(/[?&]itag=(\d+)/)?.[1];
+  const mimeType = ['141', '140', '139'].includes(itag) ? 'audio/mp4' : 'audio/webm';
+  return { url, mimeType };
 }
 
 async function searchYouTube(query) {
@@ -115,4 +110,4 @@ function extractPlaylistId(url) {
   }
 }
 
-module.exports = { getClient, getPlaylistTracks, getVideoInfo, streamAudio, getStreamUrl, searchYouTube };
+module.exports = { getClient, resetClient, getPlaylistTracks, getVideoInfo, streamAudio, getStreamUrl, searchYouTube };
